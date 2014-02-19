@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Snake</title>
+        <link rel="stylesheet" type="text/css" href="css/site.css">
+        <script src="js/lib/createjs-2013.12.12.min.js"></script>
+        <script src="js/lib/jquery-2.1.0.min.js"></script>
+        <script src="js/irysius/canvas.js"></script>
+        <script src="js/irysius/input.js"></script>
+        <script src="js/irysius/utility.js"></script>
+    </head>
+    <body>
+        <canvas id="main-canvas"></canvas>
+        <script>
+            var rnd = new irysius.utility.Random();
+            $(function () {
+                irysius.createJsCanvas.vars.calculateMapBounds();
+                irysius.createJsCanvas.manifest.push({ id: 'main', src: 'img/snake.png' });
+                irysius.createJsCanvas.init('main-canvas');
+            })
+            var WIDTH = 15, HEIGHT = 21;
+            irysius.createJsCanvas.vars.mapBounds = [];
+            irysius.createJsCanvas.vars.calculateMapBounds = function () {
+                var map = irysius.createJsCanvas.vars.mapBounds;
+                var i = -1;
+                for (; i <= WIDTH; ++i) {
+                    map.push({ x: i, y: -1 });
+                    map.push({ x: i, y: HEIGHT });
+                }
+                i = 0;
+                for (; i < HEIGHT; ++i) {
+                    map.push({ x: -1, y: i });
+                    map.push({ x: WIDTH, y: i });
+                }
+            };
+
+            // Defines the bounds for the background rectangle
+            irysius.createJsCanvas.vars.backgroundRect = function () {
+                var self = irysius.createJsCanvas;
+                var bgWidth = 0, bgHeight = 0, bgX = 0, bgY = 0;
+                if (self.height() > self.width()) {
+                    bgWidth = self.width();
+                    bgHeight = Math.round(self.width() / 3 * 4);
+                } else {
+                    bgHeight = self.height();
+                    bgWidth = Math.round(self.height() / 4 * 3);
+                }
+
+                bgX = (self.width() - bgWidth) / 2;
+                bgY = (self.height() - bgHeight) / 2;
+
+                return { x: bgX, y: bgY, w: bgWidth, h: bgHeight };
+            }
+
+            irysius.createJsCanvas.loaded = function (context) {
+                var bgRect = context.vars.backgroundRect();
+                var background = generateRect('background', BGCOLOR, bgRect);
+                context.stage.addChild(background);
+
+                var menuText = generateText('menuText', 'Press LMB to begin.', '20px Arial', '#FF7700');
+                context.stage.addChild(menuText);
+
+                var main = context.preload.getResult('main');
+                var datHead = {
+                    images: [main],
+                    frames: { width: 40, height: 40 },
+                    animations: {
+                        run: {
+                            frames: [0, 1, 2, 3, 4, 3, 2, 1],
+                            next: 'run',
+                            speed: 0.4
+                        },
+                        death: {
+                            frames: [5, 6, 7, 8, 9, 10, 30],
+                            next: '',
+                            speed: 0.1
+                        }
+                    }
+                }
+                var ssHead = new createjs.SpriteSheet(datHead);
+                var animHead = new createjs.Sprite(ssHead, 'run');
+                animHead.name = 'animHead';
+                animHead.regX = 20;
+                animHead.regY = 20;
+                context.vars.snakeHead = animHead;
+
+                var animBodies = [];
+                var i = 1;
+                context.vars.snakeBody = [];
+                for (; i <= 9; ++i) {
+                    var body = generateSnakeBody(main, i);
+                    body.regX = 20;
+                    body.regY = 20;
+                    context.vars.snakeBody.push(body);
+                }
+
+                context.vars.bounds = {};
+                var boundV = new createjs.Bitmap(main);
+                boundV.sourceRect = new createjs.Rectangle(0, 160, 40, 40);
+                context.vars.bounds.v = boundV;
+                var boundH = new createjs.Bitmap(main);
+                boundH.sourceRect = new createjs.Rectangle(40, 160, 40, 40);
+                context.vars.bounds.h = boundH;
+                var boundLB = new createjs.Bitmap(main);
+                boundLB.sourceRect = new createjs.Rectangle(80, 160, 40, 40);
+                context.vars.bounds.lb = boundLB;
+                var boundRB = new createjs.Bitmap(main);
+                boundRB.sourceRect = new createjs.Rectangle(160, 160, 40, 40);
+                context.vars.bounds.rb = boundRB;
+                var boundLU = new createjs.Bitmap(main);
+                boundLU.sourceRect = new createjs.Rectangle(200, 160, 40, 40);
+                context.vars.bounds.lu = boundLU;
+                var boundRU = new createjs.Bitmap(main);
+                boundRU.sourceRect = new createjs.Rectangle(240, 160, 40, 40);
+                context.vars.bounds.ru = boundRU;
+
+                var pauseBackground = generateRect('pauseBackground', '#EEEEEE', bgRect);
+                pauseBackground.alpha = 0.75;
+                context.stage.addChild(pauseBackground);
+
+                var pauseText = generateText('pauseText', 'Press LMB to resume.', '20px Arial', '#FF7700');
+                context.stage.addChild(pauseText);
+
+                var scoreText0 = generateText('scoreText', 'Final Score', '20px Arial', '#8C1717', 0);
+                context.stage.addChild(scoreText0);
+
+                var scoreText1 = generateText('scoreText', '0', '20px Arial', '#8C1717', 1);
+                context.stage.addChild(scoreText1);
+
+                var scoreText2 = generateText('scoreText', 'Press LMB to return to menu.', '20px Arial', '#8C1717', 2);
+                context.stage.addChild(scoreText2);
+
+                menuPage.resize(bgRect);
+                pausePage.resize(bgRect);
+                gamePage.resize(bgRect);
+                scorePage.resize(bgRect);
+
+                updateGameState(currGameState);
+
+                irysius.input.keyboard.init();
+                irysius.input.mouse.init(context.stage);
+            }
+
+            function generateRect(name, color, bounds) {
+                var bg = new createjs.Shape();
+                bg.name = name;
+                bg.graphics.beginFill(color).drawRect(bounds.x, bounds.y, bounds.w, bounds.h);
+                return bg;
+            }
+            function generateText(name, text, font, color, i) {
+                var gText = new createjs.Text(text, font, color);
+                if (i || i == 0) gText.name = name + i;
+                else gText.name = name;
+                gText.regX = gText.getMeasuredWidth() / 2;
+                gText.regY = gText.getMeasuredHeight() / 2;
+                return gText;
+            }
+            function generateSnakeBody(img, i) {
+                var datBody = {
+                    images: [img],
+                    frames: { width: 40, height: 40 },
+                    animations: {
+                        run: {
+                            frames: [(10 + i)],
+                            next: 'run',
+                            speed: 0.1
+                        },
+                        death: {
+                            frames: [(10 + i), (20 + i), (30 + i), 20, 30],
+                            next: '',
+                            speed: 0.06
+                        }
+                    }
+                }
+                var ssBody = new createjs.SpriteSheet(datBody);
+                var animBody = new createjs.Sprite(ssBody, 'run');
+                return animBody;
+            }
+
+            function moveUp(target, speed, complete) {
+                speed = speed || 1000;
+                if (complete && typeof (complete) == 'function') {
+                    createjs.Tween.get(target).to({ y: target.y - 40 }, speed).call(complete);
+                } else {
+                    createjs.Tween.get(target).to({ y: target.y - 40 }, speed);
+                }
+            }
+            function moveDown(target, speed, complete) {
+                speed = speed || 1000;
+                if (complete && typeof (complete) == 'function') {
+                    createjs.Tween.get(target).to({ y: target.y + 40 }, speed).call(complete);
+                } else {
+                    createjs.Tween.get(target).to({ y: target.y + 40 }, speed);
+                }
+            }
+            function moveLeft(target, speed, complete) {
+                speed = speed || 1000;
+                if (complete && typeof (complete) == 'function') {
+                    createjs.Tween.get(target).to({ x: target.x - 40 }, speed).call(complete);
+                } else {
+                    createjs.Tween.get(target).to({ x: target.x - 40 }, speed);
+                }
+            }
+            function moveRight(target, speed, complete) {
+                speed = speed || 1000;
+                if (complete && typeof (complete) == 'function') {
+                    createjs.Tween.get(target).to({ x: target.x + 40 }, speed).call(complete);
+                } else {
+                    createjs.Tween.get(target).to({ x: target.x + 40 }, speed);
+                }
+            }
+            function turnLeft(target, speed, complete) {
+                speed = speed || 1000;
+                if (target.rotation == -90) target.rotation = 270;
+                if (complete && typeof (complete) == 'function') {
+                    createjs.Tween.get(target).to({ rotation: 180 }, speed).call(complete);
+                } else {
+                    createjs.Tween.get(target).to({ rotation: 180 }, speed);
+                }
+            }
+            function turnRight(target, speed, complete) {
+                speed = speed || 1000;
+                if (complete && typeof (complete) == 'function') {
+                    createjs.Tween.get(target).to({ rotation: 0 }, speed).call(complete);
+                } else {
+                    createjs.Tween.get(target).to({ rotation: 0 }, speed);
+                }
+            }
+            function turnUp(target, speed, complete) {
+                speed = speed || 1000;
+                if (target.rotation == 180) target.rotation = -180;
+                if (complete && typeof (complete) == 'function') {
+                    createjs.Tween.get(target).to({ rotation: -90 }, speed).call(complete);
+                } else {
+                    console.log('hi');
+                    createjs.Tween.get(target).to({ rotation: -90 }, speed);
+                }
+            }
+            function turnDown(target, speed, complete) {
+                speed = speed || 1000;
+                if (complete && typeof (complete) == 'function') {
+                    createjs.Tween.get(target).to({ rotation: 90 }, speed).call(complete);
+                } else {
+                    createjs.Tween.get(target).to({ rotation: 90 }, speed);
+                }
+            }
+
+            irysius.createJsCanvas.update = function (context, elapsedTime) {
+                irysius.input.tick();
+                switch (currGameState) {
+                    case GAMESTATE_MENU:
+                        menuPage.update(context, elapsedTime);
+                        break;
+                    case GAMESTATE_PAUSED:
+                        pausePage.update(context, elapsedTime);
+                        break;
+                    case GAMESTATE_PLAYING:
+                        gamePage.update(context, elapsedTime);
+                        break;
+                    case GAMESTATE_SCORE:
+                        scorePage.update(context, elapsedTime);
+                        break;
+                }
+                if (prevGameState != currGameState) {
+                    updateGameState(currGameState);
+                }
+                prevGameState = currGameState;
+            }
+
+            // Optimize for 4:3
+            irysius.createJsCanvas.resizing = function (context, width, height) {
+                if (context.isLoaded) {
+                    var bgRect = context.vars.backgroundRect();
+                    var background = context.find('background');
+                    background.graphics.clear();
+                    background.graphics.beginFill(BGCOLOR).drawRect(bgRect.x, bgRect.y, bgRect.w, bgRect.h);
+                    menuPage.resize(bgRect);
+                    pausePage.resize(bgRect);
+                    gamePage.resize(bgRect);
+                    scorePage.resize(bgRect);
+                }
+            }
+
+            var BGCOLOR = '#6495ED';
+            var GAMESTATE_MENU = 'MENU', GAMESTATE_PLAYING = 'PLAYING', GAMESTATE_PAUSED = 'PAUSED', GAMESTATE_SCORE = 'SCORE';
+            var prevGameState = GAMESTATE_MENU;
+            var currGameState = GAMESTATE_PLAYING;
+            var score = 0;
+            var snakeLength = 8;
+
+            var menuPage = {
+                context: irysius.createJsCanvas,
+                update: function (context, elapsedTime) {
+                    var clicked = irysius.input.mouse.state.click.LMB;
+                    if (clicked) {
+                        currGameState = GAMESTATE_PAUSED;
+                    }
+                },
+                show: function () {
+                    var text = menuPage.context.find('menuText');
+                    if (text) text.alpha = 1;
+                },
+                hide: function () {
+                    var text = menuPage.context.find('menuText');
+                    if (text) text.alpha = 0;
+                },
+                resize: function (bounds) {
+                    var text = menuPage.context.find('menuText');
+                    text.x = bounds.x + bounds.w / 2;
+                    text.y = bounds.y + bounds.h / 2;
+                }
+            }
+            var gamePage = {
+                context: irysius.createJsCanvas,
+                assetNames: [],
+                currDirection: 'DOWN',
+                initialized: false,
+                nextDirection: [],
+                hasEnded: false,
+                isDying: false,
+                speed: 250,
+                lastDirection: function () {
+                    var self = gamePage;
+                    if (self.nextDirection.length == 0) return self.currDirection;
+                    else return self.nextDirection[self.nextDirection.length - 1];
+                },
+                snake: [
+                    { x: 8, y: 0, elem: null },
+                    { x: 8, y: 1, elem: null },
+                    { x: 8, y: 2, elem: null },
+                    { x: 8, y: 3, elem: null },
+                    { x: 8, y: 4, elem: null },
+                    { x: 8, y: 5, elem: null },
+                    { x: 8, y: 6, elem: null },
+                    { x: 8, y: 7, elem: null, type: -1 }
+                ],
+                map: [],
+                getPosition: function (x, y, bounds) {
+                    bounds = bounds || { x: 0, y: 0 };
+                    return {
+                        x: 20 + x * 40 + bounds.x,
+                        y: 20 + y * 40 + bounds.y
+                    };
+                },
+                getRandomBody: function () {
+                    var self = gamePage;
+                    var max = self.context.vars.snakeBody.length - 1;
+                    var idx = Math.round(rnd.next(0, max));
+                    return self.context.vars.snakeBody[idx].clone(true);
+                },
+                init: function () {
+                    var self = gamePage;
+                    var bgRect = self.context.vars.backgroundRect();
+                    // initialize snake
+                    var snakeHead = self.snake[self.snake.length - 1];
+                    snakeHead.elem = self.context.vars.snakeHead.clone(true);
+                    var snakeHeadPosition = self.getPosition(snakeHead.x, snakeHead.y, bgRect);
+                    snakeHead.elem.x = snakeHeadPosition.x;
+                    snakeHead.elem.y = snakeHeadPosition.y;
+                    snakeHead.elem.rotation = 90;
+                    self.context.stage.addChild(snakeHead.elem);
+                    var i = gamePage.snake.length - 2;
+                    for (; i >= 0; --i) {
+                        var snakeBody = self.snake[i];
+                        snakeBody.elem = self.getRandomBody();
+                        var snakeBodyPosition = self.getPosition(snakeBody.x, snakeBody.y, bgRect);
+                        snakeBody.elem.x = snakeBodyPosition.x;
+                        snakeBody.elem.y = snakeBodyPosition.y;
+                        snakeBody.elem.name = 'body' + (self.snake.length - i);
+                        self.context.stage.addChild(snakeBody.elem);
+                    }
+
+                    // initialize bounds
+                    self.map.push(self.context.vars.mapBounds);
+                    i = 0;
+                    for (; i < self.map.length; ++i) { 
+                        
+                    }
+
+                    self.initialized = true;
+                },
+                addSegment: function () {
+                    var self = gamePage;
+                    var x = self.snake[0].x, y = self.snake[0].y;
+                    var segment = { x: x, y: y, elem: self.getRandomBody() };
+                    var position = self.getPosition(segment.x, segment.y, self.context.vars.backgroundRect());
+                    segment.elem.x = position.x;
+                    segment.elem.y = position.y;
+                    self.snake.unshift(segment);
+                    self.context.stage.addChild(segment.elem);
+                },
+                removeSegment: function () {
+                    var self = gamePage;
+                    var segment = self.snake[0];
+                    self.context.stage.removeChild(segment.elem);
+                    self.snake.shift(segment);
+                    delete segment;
+                },
+                update: function (context, elapsedTime) {
+                    var self = gamePage;
+                    if (!self.hasEnded) self._updateGame(context, elapsedTime);
+                    else self._updateGameOver(context, elapsedTime);
+                },
+                _updateGame: function (context, elapsedTime) {
+                    var self = gamePage;
+                    if (!self.initialized) return;
+
+                    var keyboardState = irysius.input.keyboard.state;
+                    var snakeHead = self.snake[self.snake.length - 1];
+                    var speed = self.speed;
+
+                    if (keyboardState.click.KEY_UP && self.lastDirection() != 'DOWN') {
+                        self.nextDirection.push('UP');
+                    }
+                    if (keyboardState.click.KEY_DOWN && self.lastDirection() != 'UP') {
+                        self.nextDirection.push('DOWN');
+                    }
+                    if (keyboardState.click.KEY_RIGHT && self.lastDirection() != 'LEFT') {
+                        self.nextDirection.push('RIGHT');
+                    }
+                    if (keyboardState.click.KEY_LEFT && self.lastDirection() != 'RIGHT') {
+                        self.nextDirection.push('LEFT');
+                    }
+                    if (keyboardState.click.KEY_SPACE) self.addSegment();
+                    if (keyboardState.click.KEY_A) self.removeSegment();
+
+                    if (self.nextDirection.length > 0 && !self._inMovement) {
+                        var nextDirection = self.nextDirection.shift();
+                        self._inMovement = true;
+                        if (self._checkCollision(nextDirection)) return;
+                        self._updateBodies();
+                        switch (nextDirection) {
+                            case 'UP':
+                                turnUp(snakeHead.elem, speed * 0.3);
+                                moveUp(snakeHead.elem, speed, self.movementComplete);
+                                snakeHead.y -= 1;
+                                break;
+                            case 'DOWN':
+                                turnDown(snakeHead.elem, speed * 0.3);
+                                moveDown(snakeHead.elem, speed, self.movementComplete);
+                                snakeHead.y += 1;
+                                break;
+                            case 'LEFT':
+                                turnLeft(snakeHead.elem, speed * 0.3);
+                                moveLeft(snakeHead.elem, speed, self.movementComplete);
+                                snakeHead.x -= 1;
+                                break;
+                            case 'RIGHT':
+                                turnRight(snakeHead.elem, speed * 0.3);
+                                moveRight(snakeHead.elem, speed, self.movementComplete);
+                                snakeHead.x += 1;
+                                break;
+                        }
+                        self.currDirection = nextDirection;
+                    } else if (!self._inMovement) {
+                        self._inMovement = true;
+                        if (self._checkCollision(self.currDirection)) return;
+                        self._updateBodies();
+                        switch (self.currDirection) {
+                            case 'DOWN':
+                                moveDown(snakeHead.elem, speed, self.movementComplete);
+                                snakeHead.y += 1;
+                                break;
+                            case 'UP':
+                                moveUp(snakeHead.elem, speed, self.movementComplete);
+                                snakeHead.y -= 1;
+                                break;
+                            case 'LEFT':
+                                moveLeft(snakeHead.elem, speed, self.movementComplete);
+                                snakeHead.x -= 1;
+                                break;
+                            case 'RIGHT':
+                                moveRight(snakeHead.elem, speed, self.movementComplete);
+                                snakeHead.x += 1;
+                                break;
+                        }
+                    }
+
+                },
+                _updateGameOver: function (context, elapsedTime) {
+                    var self = gamePage;
+                    var i = 0;
+                    if (!self.isDying) {
+                        for (; i < self.snake.length; ++i) {
+                            self.snake[i].elem.gotoAndPlay('death');
+                        }
+                        self.isDying = true;
+                    }
+                },
+                _updateBodies: function () {
+                    var self = gamePage;
+                    var i = 0;
+                    for (; i < self.snake.length - 1; ++i) {
+                        self._updateBody(i);
+                    }
+                },
+                _updateBody: function (idx) {
+                    var self = gamePage;
+                    var curr = self.snake[idx];
+                    var next = self.snake[idx + 1];
+                    if (next.x > curr.x) {
+                        moveRight(curr.elem, self.speed);
+                        curr.x += 1;
+                    } else if (next.x < curr.x) {
+                        moveLeft(curr.elem, self.speed);
+                        curr.x -= 1;
+                    } else if (next.y > curr.y) {
+                        moveDown(curr.elem, self.speed);
+                        curr.y += 1;
+                    } else if (next.y < curr.y) {
+                        moveUp(curr.elem, self.speed);
+                        curr.y -= 1;
+                    }
+                },
+                _inMovement: false,
+                _checkCollision: function (nextDirection) {
+                    var self = gamePage;
+                    var snakeHead = self.snake[self.snake.length - 1];
+                    var heading = { x: snakeHead.x, y: snakeHead.y };
+                    switch (nextDirection) {
+                        case 'UP':
+                            heading.y -= 1;
+                            break;
+                        case 'DOWN':
+                            heading.y += 1;
+                            break;
+                        case 'LEFT':
+                            heading.x -= 1;
+                            break;
+                        case 'RIGHT':
+                            heading.x += 1;
+                            break;
+                    }
+                    var coords = self._getSegmentCoords();
+                    var i = 0;
+                    var exists = false;
+                    for (; i < coords.length; ++i) {
+                        var coord = coords[i];
+                        if (coord.x == heading.x && coord.y == heading.y) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (exists) { self.hasEnded = true; }
+                    return self.hasEnded;
+                },
+                _getSegmentCoords: function () {
+                    var self = gamePage;
+                    var i = 0;
+                    var coords = [];
+                    for (; i < self.snake.length - 2; ++i) {
+                        var segment = self.snake[i];
+                        coords.push({ x: segment.x, y: segment.y });
+                    }
+                    return coords;
+                },
+                _getEmptyCoord: function () {
+                    var self = gamePage;
+
+                },
+                movementComplete: function () {
+                    var self = gamePage;
+                    self._inMovement = false;
+                },
+                resume: function () {
+
+                },
+                show: function () {
+
+                },
+                hide: function () {
+                },
+                resize: function (bounds) {
+
+                }
+            }
+            var pausePage = {
+                context: irysius.createJsCanvas,
+                update: function (context, elapsedTime) {
+                    var clicked = irysius.input.mouse.state.click.LMB;
+                    if (clicked) {
+                        currGameState = GAMESTATE_SCORE;
+                    }
+                },
+                show: function () {
+                    var text = pausePage.context.find('pauseText');
+                    if (text) text.alpha = 1;
+                    var pauseBackground = pausePage.context.find('pauseBackground');
+                    if (pauseBackground) pauseBackground.alpha = 0.75;
+                },
+                hide: function () {
+                    var text = pausePage.context.find('pauseText');
+                    if (text) text.alpha = 0;
+                    var pauseBackground = pausePage.context.find('pauseBackground');
+                    if (pauseBackground) pauseBackground.alpha = 0;
+                },
+                resize: function (bounds) {
+                    var text = menuPage.context.find('pauseText');
+                    text.x = bounds.x + bounds.w / 2;
+                    text.y = bounds.y + bounds.h / 2;
+                    var pauseBackground = pausePage.context.find('pauseBackground');
+                    pauseBackground.graphics.clear();
+                    pauseBackground.graphics.beginFill('#EEEEEE').drawRect(bounds.x, bounds.y, bounds.w, bounds.h);
+                }
+            }
+            var scorePage = {
+                context: irysius.createJsCanvas,
+                update: function (context, elapsedTime) {
+                    var clicked = irysius.input.mouse.state.click.LMB;
+                    if (clicked) {
+                        resetGame();
+                        currGameState = GAMESTATE_MENU;
+                    }
+                },
+                show: function () {
+                    var score0 = scorePage.context.find('scoreText0');
+                    var score1 = scorePage.context.find('scoreText1');
+                    var score2 = scorePage.context.find('scoreText2');
+                    if (score0) score0.alpha = 1;
+                    if (score1) {
+                        score1.text = score.toString();
+                        score1.regX = score1.getMeasuredWidth() / 2;
+                        score1.alpha = 1;
+                    }
+                    if (score2) score2.alpha = 1;
+                },
+                hide: function () {
+                    var score0 = scorePage.context.find('scoreText0');
+                    var score1 = scorePage.context.find('scoreText1');
+                    var score2 = scorePage.context.find('scoreText2');
+                    if (score0) score0.alpha = 0;
+                    if (score1) score1.alpha = 0;
+                    if (score2) score2.alpha = 0;
+                },
+                resize: function (bounds) {
+                    var score0 = scorePage.context.find('scoreText0');
+                    var score1 = scorePage.context.find('scoreText1');
+                    var score2 = scorePage.context.find('scoreText2');
+                    score1.regX = score1.getMeasuredWidth() / 2;
+                    score1.x = bounds.x + bounds.w / 2;
+                    score1.y = bounds.y + bounds.h / 2;
+                    score0.x = score1.x;
+                    score0.y = score1.y - (score1.getMeasuredHeight() * 2);
+                    score2.x = score1.x;
+                    score2.y = score1.y + (score1.getMeasuredHeight() * 2);
+                }
+            }
+
+            function resetGame() {
+                gameState = GAMESTATE_MENU;
+                score = 0;
+                snakeLength = 8;
+            }
+
+            function updateGameState(gameState) {
+                switch (gameState) {
+                    case GAMESTATE_MENU:
+                        menuPage.show();
+                        gamePage.hide();
+                        pausePage.hide();
+                        scorePage.hide();
+                        break;
+                    case GAMESTATE_PLAYING:
+                        menuPage.hide();
+                        gamePage.show();
+                        pausePage.hide();
+                        scorePage.hide();
+                        break;
+                    case GAMESTATE_PAUSED:
+                        menuPage.hide();
+                        gamePage.show();
+                        pausePage.show();
+                        scorePage.hide();
+                        break;
+                    case GAMESTATE_SCORE:
+                        menuPage.hide();
+                        gamePage.hide();
+                        pausePage.hide();
+                        scorePage.show();
+                        break;
+                }
+            }
+        </script>
+    </body>
+</html>

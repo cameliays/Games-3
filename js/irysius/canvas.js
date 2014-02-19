@@ -2,6 +2,7 @@ var irysius = irysius || {};
 
 irysius.createJsCanvas = {
     initialized: false,
+    isLoaded: false,
     stage: null,
     canvas: null,
     $container: null,
@@ -33,7 +34,7 @@ irysius.createJsCanvas = {
         self.stage = new createjs.Stage(self.canvas);
         //createjs.Touch.enable(self.stage);
         self.preload = new createjs.LoadQueue(true);
-        self.preload.addEventListener('complete', self._prepareAssets);
+        self.preload.addEventListener('complete', self._loaded);
 
         if (self.manifest && self.manifest.length > 0) {
             self.preload.loadManifest(self.manifest, false);
@@ -42,15 +43,16 @@ irysius.createJsCanvas = {
         self.preload.load();
         self.initialized = true;
     },
-    prepareAssets: function (context) { },
-    _prepareAssets: function () {
+    loaded: function (context) { },
+    _loaded: function () {
         var self = irysius.createJsCanvas;
         console.log('preparing assets');
         self._resizing();
-        self.prepareAssets(self);
+        self.loaded(self);
+        self.isLoaded = true;
         self.run();
     },
-    resizing: function (width, height) { },
+    resizing: function (context, width, height) { },
     _resizing: function () {
         var self = irysius.createJsCanvas;
         var width = self.$container.width();
@@ -61,7 +63,7 @@ irysius.createJsCanvas = {
         self._height = height;
         console.log('resizing to: ' + width + 'x' + height);
 
-        self.resizing(width, height);
+        self.resizing(self, width, height);
     },
     run: function () {
         var self = irysius.createJsCanvas;

@@ -248,7 +248,16 @@ irysius.input.mouse = {
         e = e || window.event;
         var input = irysius.input;
         var rawState = irysius.input.mouse.state.raw;
-        rawState.LMB = true;
+        var clickType = 'LEFT';
+        if (e.nativeEvent.which) {
+            if (e.nativeEvent.which == 3) clickType = 'RIGHT';
+            if (e.nativeEvent.which == 2) clickType = 'MIDDLE';
+        } else if (e.nativeEvent.button) {
+            if (e.nativeEvent.button == 2) clickType = 'RIGHT';
+            if (e.nativeEvent.button == 4) clickType = 'MIDDLE';
+        }
+        if (clickType == 'LEFT') rawState.LMB = true;
+
         rawState.X = e.stageX / input.screenScale;
         rawState.Y = e.stageY / input.screenScale;
         rawState.TIMESTAMP = e.timeStamp;
