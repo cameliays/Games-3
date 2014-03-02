@@ -15,25 +15,10 @@
         <script>
             var rnd = new irysius.utility.Random();
             $(function () {
-                irysius.createJsCanvas.vars.calculateMapBounds();
                 irysius.createJsCanvas.manifest.push({ id: 'main', src: 'img/snake.png' });
                 irysius.createJsCanvas.init('main-canvas');
             })
             var WIDTH = 15, HEIGHT = 21;
-            irysius.createJsCanvas.vars.mapBounds = [];
-            irysius.createJsCanvas.vars.calculateMapBounds = function () {
-                var map = irysius.createJsCanvas.vars.mapBounds;
-                var i = -1;
-                for (; i <= WIDTH; ++i) {
-                    map.push({ x: i, y: -1 });
-                    map.push({ x: i, y: HEIGHT });
-                }
-                i = 0;
-                for (; i < HEIGHT; ++i) {
-                    map.push({ x: -1, y: i });
-                    map.push({ x: WIDTH, y: i });
-                }
-            };
 
             // Defines the bounds for the background rectangle
             irysius.createJsCanvas.vars.backgroundRect = function () {
